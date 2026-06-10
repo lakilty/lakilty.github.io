@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KnowIt — Quiz Generator</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --surface: #1a1a2e;
+    --card: #16213e;
+    --accent: #7c3aed;
+    --accent2: #06b6d4;
+    --green: #10b981;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #2d3748;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Layout */
+  .screen { display: none; min-height: 100vh; padding: 2rem 1rem; }
+  .screen.active { display: flex; flex-direction: column; align-items: center; }
+  .container { width: 100%; max-width: 680px; }
+
+  /* Header */
+  .logo { font-size: 2rem; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.25rem; }
+  .tagline { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 1rem; padding: 1.5rem; margin-bottom: 1rem; }
+  .card h2 { font-size: 1.1rem; color: var(--text); margin-bottom: 1rem; }
+
+  /* Subject grid */
+  .subject-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+  .subject-btn { background: var(--surface); border: 2px solid var(--border); border-radius: 0.75rem; padding: 1rem; cursor: pointer; transition: all 0.2s; text-align: left; color: var(--text); }
+  .subject-btn:hover { border-color: var(--accent); }
+  .subject-btn.selected { border-color: var(--accent); background: rgba(124,58,237,0.15); }
+  .subject-btn .emoji { font-size: 1.8rem; display: block; margin-bottom: 0.4rem; }
+  .subject-btn .name { font-weight: 600; display: block; }
+  .subject-btn .desc { font-size: 0.78rem; color: var(--muted); display: block; margin-top: 0.2rem; }
+
+  /* Range selects */
+  .range-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 480px) { .range-row { grid-template-columns: 1fr; } .subject-grid { grid-template-columns: 1fr 1fr; } }
+  label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.4rem; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+  select { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.65rem 0.9rem; color: var(--text); font-size: 0.95rem; cursor: pointer; }
+  select:focus { outline: 2px solid var(--accent); }
+
+  /* Buttons */
+  .btn { display: inline-block; padding: 0.75rem 2rem; border-radius: 0.6rem; font-weight: 600; font-size: 1rem; cursor: pointer; border: none; transition: all 0.2s; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #6d28d9); color: #fff; width: 100%; margin-top: 0.5rem; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  /* API key section */
+  .api-section { background: rgba(6,182,212,0.07); border: 1px solid rgba(6,182,212,0.2); border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; }
+  .api-section summary { cursor: pointer; font-size: 0.9rem; color: var(--accent2); font-weight: 500; }
+  .api-section input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.6rem 0.9rem; color: var(--text); font-size: 0.9rem; margin-top: 0.75rem; }
+  .api-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; }
+
+  /* Quiz screen */
+  .progress-bar-wrap { background: var(--surface); border-radius: 99px; height: 6px; margin-bottom: 1.5rem; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; transition: width 0.4s; }
+  .q-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; }
+  .question-text { font-size: 1.2rem; font-weight: 600; line-height: 1.5; margin-bottom: 1.5rem; }
+  .options { display: flex; flex-direction: column; gap: 0.65rem; }
+  .option-btn { background: var(--surface); border: 2px solid var(--border); border-radius: 0.75rem; padding: 0.9rem 1.1rem; text-align: left; color: var(--text); font-size: 0.95rem; cursor: pointer; transition: all 0.2s; }
+  .option-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(124,58,237,0.1); }
+  .option-btn.correct { border-color: var(--green); background: rgba(16,185,129,0.15); }
+  .option-btn.wrong { border-color: var(--red); background: rgba(239,68,68,0.15); }
+  .option-btn:disabled { cursor: default; }
+  .feedback { margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 0.6rem; font-size: 0.9rem; }
+  .feedback.correct { background: rgba(16,185,129,0.1); color: var(--green); }
+  .feedback.wrong { background: rgba(239,68,68,0.1); color: #fca5a5; }
+  .next-btn-wrap { margin-top: 1rem; }
+
+  /* Results */
+  .score-circle { width: 120px; height: 120px; border-radius: 50%; background: conic-gradient(var(--accent) calc(var(--pct) * 3.6deg), var(--surface) 0); display: flex; align-items: center; justify-content: center; margin: 1.5rem auto; position: relative; }
+  .score-circle::before { content: ''; position: absolute; inset: 10px; border-radius: 50%; background: var(--card); }
+  .score-text { position: relative; z-index: 1; text-align: center; }
+  .score-text .num { font-size: 1.6rem; font-weight: 800; }
+  .score-text .denom { font-size: 0.8rem; color: var(--muted); }
+  .result-label { text-align: center; font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .result-sub { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .review-list { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1.5rem; }
+  .review-item { padding: 0.8rem 1rem; border-radius: 0.65rem; font-size: 0.88rem; }
+  .review-item.correct { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); }
+  .review-item.wrong { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); }
+  .review-q { font-weight: 500; margin-bottom: 0.3rem; }
+  .review-a { color: var(--muted); }
+  .review-a span { font-weight: 600; }
+  .review-a .yours { color: #fca5a5; }
+  .review-a .correct-ans { color: var(--green); }
+  .share-box { background: var(--surface); border: 1px solid var(--border); border-radius: 0.6rem; padding: 0.85rem 1rem; font-size: 0.9rem; color: var(--muted); cursor: pointer; text-align: center; margin-bottom: 1rem; }
+  .share-box:hover { border-color: var(--accent2); }
+  .btn-row { display: flex; gap: 0.75rem; }
+  .btn-row .btn { flex: 1; text-align: center; }
+
+  /* Loading spinner */
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 2rem auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none !important; }
+  .api-badge { display: inline-block; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 99px; background: rgba(6,182,212,0.15); color: var(--accent2); border: 1px solid rgba(6,182,212,0.3); margin-left: 0.5rem; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div id="screen-setup" class="screen active">
+  <div class="container">
+    <div class="logo">KnowIt</div>
+    <div class="tagline">Test and expand your knowledge of history & science</div>
+
+    <div class="card">
+      <h2>Choose a subject</h2>
+      <div class="subject-grid">
+        <button class="subject-btn" data-subject="history" onclick="selectSubject(this)">
+          <span class="emoji">📜</span>
+          <span class="name">History</span>
+          <span class="desc">Events, civilizations & eras</span>
+        </button>
+        <button class="subject-btn" data-subject="science" onclick="selectSubject(this)">
+          <span class="emoji">🔬</span>
+          <span class="name">Science</span>
+          <span class="desc">Physics, chemistry & biology</span>
+        </button>
+        <button class="subject-btn" data-subject="botany" onclick="selectSubject(this)">
+          <span class="emoji">🌿</span>
+          <span class="name">Botany</span>
+          <span class="desc">Plants, ecosystems & evolution</span>
+        </button>
+        <button class="subject-btn" data-subject="geology" onclick="selectSubject(this)">
+          <span class="emoji">🪨</span>
+          <span class="name">Geology</span>
+          <span class="desc">Rocks, eras & earth processes</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="card hidden" id="range-card">
+      <h2>Narrow your focus <span style="color:var(--muted);font-weight:400;font-size:0.85rem">(optional)</span></h2>
+      <div class="range-row">
+        <div>
+          <label id="range1-label">Time Period</label>
+          <select id="range1"><option value="">Any time period</option></select>
+        </div>
+        <div>
+          <label id="range2-label">Region / Culture</label>
+          <select id="range2"><option value="">Any region</option></select>
+        </div>
+      </div>
+    </div>
+
+    <details class="api-section" id="api-section">
+      <summary>⚡ Use AI-generated questions (optional)</summary>
+      <input type="password" id="gemini-key" placeholder="Paste your free Gemini API key here…">
+      <div class="api-note">Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent2)">aistudio.google.com</a> — no credit card needed. Your key stays in your browser only.</div>
+    </details>
+
+    <button class="btn btn-primary" id="start-btn" disabled onclick="startQuiz()">Select a subject to begin</button>
+  </div>
+</div>
+
+<!-- QUIZ SCREEN -->
+<div id="screen-quiz" class="screen">
+  <div class="container">
+    <div class="q-meta">
+      <span id="q-label">Question 1 of 10</span>
+      <span id="q-subject-badge"></span>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-fill" style="width:10%"></div>
+    </div>
+    <div id="loading-spinner" class="spinner hidden"></div>
+    <div id="quiz-content">
+      <div class="question-text" id="question-text"></div>
+      <div class="options" id="options"></div>
+      <div class="feedback hidden" id="feedback"></div>
+      <div class="next-btn-wrap hidden" id="next-wrap">
+        <button class="btn btn-primary" onclick="nextQuestion()">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS SCREEN -->
+<div id="screen-results" class="screen">
+  <div class="container">
+    <div class="logo" style="text-align:center">KnowIt</div>
+    <div class="card">
+      <div id="score-circle-wrap"></div>
+      <div class="result-label" id="result-label"></div>
+      <div class="result-sub" id="result-sub"></div>
+      <div class="share-box" onclick="copyShareText()" title="Click to copy">
+        📋 Copy shareable result
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="retryQuiz()">Retry same quiz</button>
+        <button class="btn btn-primary" onclick="newQuiz()">New quiz</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Review answers</h2>
+      <ul class="review-list" id="review-list"></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── QUESTION BANK ────────────────────────────────────────────────────────────
+const BANK = {
+  history: [
+    // Ancient / Mediterranean
+    { q:"Which ancient wonder stood at the entrance of the harbour of Rhodes?", a:"The Colossus of Rhodes", opts:["The Colossus of Rhodes","The Pharos of Alexandria","The Statue of Zeus","The Temple of Artemis"], era:"Ancient", region:"Mediterranean / Europe" },
+    { q:"What year did Julius Caesar cross the Rubicon river, triggering a Roman civil war?", a:"49 BCE", opts:["49 BCE","44 BCE","27 BCE","64 BCE"], era:"Ancient", region:"Mediterranean / Europe" },
+    { q:"Which Egyptian pharaoh is most associated with the construction of Abu Simbel?", a:"Ramesses II", opts:["Ramesses II","Tutankhamun","Akhenaten","Cleopatra VII"], era:"Ancient", region:"Africa" },
+    { q:"The ancient city of Carthage was located in which modern-day country?", a:"Tunisia", opts:["Tunisia","Libya","Algeria","Morocco"], era:"Ancient", region:"Africa" },
+    { q:"Which Greek philosopher wrote 'The Republic'?", a:"Plato", opts:["Plato","Aristotle","Socrates","Thucydides"], era:"Ancient", region:"Mediterranean / Europe" },
+    { q:"The Maurya Empire was founded by which ruler in ancient India?", a:"Chandragupta Maurya", opts:["Chandragupta Maurya","Ashoka","Bindusara","Vikramaditya"], era:"Ancient", region:"Asia" },
+    { q:"Which Chinese dynasty built the first version of the Great Wall?", a:"Qin Dynasty", opts:["Qin Dynasty","Han Dynasty","Ming Dynasty","Tang Dynasty"], era:"Ancient", region:"Asia" },
+    // Medieval
+    { q:"In what year did the Norman Conquest of England occur?", a:"1066", opts:["1066","1215","1087","1099"], era:"Medieval", region:"Mediterranean / Europe" },
+    { q:"The Black Death of the 14th century is estimated to have killed what fraction of Europe's population?", a:"One-third", opts:["One-third","One-quarter","One-half","One-fifth"], era:"Medieval", region:"Mediterranean / Europe" },
+    { q:"Mansa Musa, famously the wealthiest person in history, ruled which empire?", a:"Mali Empire", opts:["Mali Empire","Songhai Empire","Ghana Empire","Benin Kingdom"], era:"Medieval", region:"Africa" },
+    { q:"The Crusades were a series of religious wars fought primarily in which region?", a:"The Holy Land (Levant)", opts:["The Holy Land (Levant)","Iberian Peninsula","North Africa","Anatolia"], era:"Medieval", region:"Middle East" },
+    { q:"Genghis Khan founded the Mongol Empire in which year?", a:"1206", opts:["1206","1215","1227","1162"], era:"Medieval", region:"Asia" },
+    // Renaissance & Early Modern
+    { q:"Leonardo da Vinci painted which famous mural in the refectory of Santa Maria delle Grazie?", a:"The Last Supper", opts:["The Last Supper","The School of Athens","The Birth of Venus","The Sistine Chapel ceiling"], era:"Renaissance / Early Modern", region:"Mediterranean / Europe" },
+    { q:"Martin Luther nailed his 95 Theses to the church door in which city?", a:"Wittenberg", opts:["Wittenberg","Rome","Geneva","Zurich"], era:"Renaissance / Early Modern", region:"Mediterranean / Europe" },
+    { q:"The Aztec capital Tenochtitlan was conquered by Hernán Cortés in which year?", a:"1521", opts:["1521","1492","1519","1535"], era:"Renaissance / Early Modern", region:"Americas" },
+    { q:"Which Portuguese explorer completed the first circumnavigation of the globe?", a:"Ferdinand Magellan", opts:["Ferdinand Magellan","Vasco da Gama","Bartolomeu Dias","Juan Sebastián Elcano"], era:"Renaissance / Early Modern", region:"Americas" },
+    // Modern
+    { q:"The Treaty of Versailles, which ended World War I, was signed in which year?", a:"1919", opts:["1919","1918","1920","1917"], era:"Modern (1800s–WWII)", region:"Mediterranean / Europe" },
+    { q:"Which country was the first to grant women the right to vote nationally?", a:"New Zealand", opts:["New Zealand","Finland","Australia","USA"], era:"Modern (1800s–WWII)", region:"Asia-Pacific" },
+    { q:"The Battle of Midway in 1942 was fought between the USA and which country?", a:"Japan", opts:["Japan","Germany","Italy","Russia"], era:"Modern (1800s–WWII)", region:"Asia" },
+    { q:"Mahatma Gandhi led the Salt March in 1930 to protest British colonial rule in which country?", a:"India", opts:["India","South Africa","Pakistan","Burma"], era:"Modern (1800s–WWII)", region:"Asia" },
+    // Post-war / Contemporary
+    { q:"The Berlin Wall fell in which year?", a:"1989", opts:["1989","1991","1987","1985"], era:"Contemporary (Post-WWII)", region:"Mediterranean / Europe" },
+    { q:"Nelson Mandela was released from prison after 27 years and became president of which country?", a:"South Africa", opts:["South Africa","Zimbabwe","Zambia","Mozambique"], era:"Contemporary (Post-WWII)", region:"Africa" },
+    { q:"The Cuban Missile Crisis of 1962 was a standoff between the USA and which country?", a:"Soviet Union", opts:["Soviet Union","Cuba","China","North Korea"], era:"Contemporary (Post-WWII)", region:"Americas" },
+    { q:"Which US president oversaw the Moon landing in 1969?", a:"Richard Nixon", opts:["Richard Nixon","Lyndon B. Johnson","John F. Kennedy","Gerald Ford"], era:"Contemporary (Post-WWII)", region:"Americas" },
+    // Americas
+    { q:"The Inca city of Machu Picchu is located in which modern country?", a:"Peru", opts:["Peru","Bolivia","Ecuador","Colombia"], era:"Ancient", region:"Americas" },
+    { q:"Which document, signed in 1776, declared American independence from Britain?", a:"The Declaration of Independence", opts:["The Declaration of Independence","The Constitution","The Magna Carta","The Articles of Confederation"], era:"Renaissance / Early Modern", region:"Americas" },
+    // Middle East
+    { q:"The ancient city of Babylon was located in which modern-day country?", a:"Iraq", opts:["Iraq","Iran","Syria","Turkey"], era:"Ancient", region:"Middle East" },
+    { q:"The Suez Canal, opened in 1869, connects the Mediterranean Sea to which body of water?", a:"The Red Sea", opts:["The Red Sea","The Persian Gulf","The Indian Ocean","The Arabian Sea"], era:"Modern (1800s–WWII)", region:"Middle East" },
+  ],
+
+  science: [
+    // Physics
+    { q:"What is the speed of light in a vacuum (approximately)?", a:"300,000 km/s", opts:["300,000 km/s","150,000 km/s","30,000 km/s","3,000,000 km/s"], era:"Any", region:"Any", branch:"Physics" },
+    { q:"Which scientist formulated the three laws of motion?", a:"Isaac Newton", opts:["Isaac Newton","Galileo Galilei","Albert Einstein","Nikola Tesla"], era:"Any", region:"Any", branch:"Physics" },
+    { q:"What does E=mc² describe?", a:"Mass-energy equivalence", opts:["Mass-energy equivalence","Gravitational force","Wave-particle duality","Thermodynamic entropy"], era:"Any", region:"Any", branch:"Physics" },
+    { q:"The Higgs boson was confirmed experimentally at which facility?", a:"CERN (Large Hadron Collider)", opts:["CERN (Large Hadron Collider)","Fermilab","SLAC","DESY"], era:"Any", region:"Any", branch:"Physics" },
+    // Chemistry
+    { q:"What is the chemical symbol for gold?", a:"Au", opts:["Au","Go","Gd","Ag"], era:"Any", region:"Any", branch:"Chemistry" },
+    { q:"How many elements are in the periodic table (as of 2024)?", a:"118", opts:["118","112","120","108"], era:"Any", region:"Any", branch:"Chemistry" },
+    { q:"Which gas makes up approximately 78% of Earth's atmosphere?", a:"Nitrogen", opts:["Nitrogen","Oxygen","Argon","Carbon dioxide"], era:"Any", region:"Any", branch:"Chemistry" },
+    { q:"What is the pH of pure water at 25°C?", a:"7", opts:["7","6","8","5.5"], era:"Any", region:"Any", branch:"Chemistry" },
+    // Biology
+    { q:"What molecule carries genetic information in most living organisms?", a:"DNA", opts:["DNA","RNA","ATP","Protein"], era:"Any", region:"Any", branch:"Biology" },
+    { q:"Which scientist is credited with the theory of natural selection?", a:"Charles Darwin", opts:["Charles Darwin","Gregor Mendel","Jean-Baptiste Lamarck","Alfred Russel Wallace"], era:"Any", region:"Any", branch:"Biology" },
+    { q:"What is the powerhouse of the cell?", a:"Mitochondria", opts:["Mitochondria","Nucleus","Ribosome","Golgi apparatus"], era:"Any", region:"Any", branch:"Biology" },
+    { q:"How many chromosomes do humans typically have?", a:"46", opts:["46","23","48","44"], era:"Any", region:"Any", branch:"Biology" },
+    // Astronomy
+    { q:"Which planet in our solar system has the most moons?", a:"Saturn", opts:["Saturn","Jupiter","Uranus","Neptune"], era:"Any", region:"Any", branch:"Astronomy" },
+    { q:"What is the name of the galaxy that contains our solar system?", a:"The Milky Way", opts:["The Milky Way","Andromeda","Triangulum","Sombrero"], era:"Any", region:"Any", branch:"Astronomy" },
+    { q:"Approximately how old is the universe?", a:"13.8 billion years", opts:["13.8 billion years","4.5 billion years","20 billion years","6 billion years"], era:"Any", region:"Any", branch:"Astronomy" },
+    { q:"What type of star is our Sun?", a:"Yellow dwarf (G-type)", opts:["Yellow dwarf (G-type)","Red giant","White dwarf","Blue supergiant"], era:"Any", region:"Any", branch:"Astronomy" },
+    // Earth Science
+    { q:"What is the outermost layer of the Earth called?", a:"The crust", opts:["The crust","The mantle","The lithosphere","The asthenosphere"], era:"Any", region:"Any", branch:"Earth Science" },
+    { q:"Which gas is primarily responsible for the greenhouse effect?", a:"Carbon dioxide", opts:["Carbon dioxide","Nitrogen","Oxygen","Methane"], era:"Any", region:"Any", branch:"Earth Science" },
+    { q:"What phenomenon causes the seasons on Earth?", a:"Earth's axial tilt", opts:["Earth's axial tilt","Varying distance from the Sun","Solar flare activity","Moon's gravitational pull"], era:"Any", region:"Any", branch:"Earth Science" },
+    { q:"What is the name of the supercontinent that existed 300 million years ago?", a:"Pangaea", opts:["Pangaea","Gondwana","Laurasia","Rodinia"], era:"Any", region:"Any", branch:"Earth Science" },
+  ],
+
+  botany: [
+    { q:"What is the process by which plants convert sunlight into food?", a:"Photosynthesis", opts:["Photosynthesis","Respiration","Transpiration","Osmosis"], era:"Any", region:"Any" },
+    { q:"What pigment gives most plants their green color?", a:"Chlorophyll", opts:["Chlorophyll","Carotenoid","Anthocyanin","Xanthophyll"], era:"Any", region:"Any" },
+    { q:"What is the term for a plant that completes its life cycle in one year?", a:"Annual", opts:["Annual","Perennial","Biennial","Ephemeral"], era:"Any", region:"Any" },
+    { q:"Which plant family does the common sunflower (Helianthus annuus) belong to?", a:"Asteraceae", opts:["Asteraceae","Rosaceae","Fabaceae","Poaceae"], era:"Any", region:"Any" },
+    { q:"What structure in plant cells is responsible for photosynthesis?", a:"Chloroplast", opts:["Chloroplast","Mitochondria","Vacuole","Cell wall"], era:"Any", region:"Any" },
+    { q:"The Amazon Rainforest is often called the 'lungs of the Earth' because it produces large amounts of which gas?", a:"Oxygen", opts:["Oxygen","Carbon dioxide","Nitrogen","Water vapor"], era:"Any", region:"South America" },
+    { q:"Which is the world's largest flower by diameter?", a:"Rafflesia arnoldii", opts:["Rafflesia arnoldii","Titan Arum","Victoria amazonica","Corpse Lily"], era:"Any", region:"Asia" },
+    { q:"What is the botanical term for the study of plants?", a:"Botany (phytology)", opts:["Botany (phytology)","Dendrology","Horticulture","Agronomy"], era:"Any", region:"Any" },
+    { q:"Which ancient civilization first cultivated wheat, around 10,000 BCE?", a:"Mesopotamia (Fertile Crescent)", opts:["Mesopotamia (Fertile Crescent)","Ancient Egypt","Indus Valley","Ancient China"], era:"Ancient", region:"Middle East" },
+    { q:"What is the term for plants that can survive in extremely dry conditions?", a:"Xerophytes", opts:["Xerophytes","Hydrophytes","Mesophytes","Halophytes"], era:"Any", region:"Any" },
+    { q:"The baobab tree, capable of storing thousands of litres of water, is native to which continent?", a:"Africa", opts:["Africa","Australia","South America","Asia"], era:"Any", region:"Africa" },
+    { q:"What is the name of the process by which plants lose water through their leaves?", a:"Transpiration", opts:["Transpiration","Evaporation","Osmosis","Guttation"], era:"Any", region:"Any" },
+    { q:"Which plant produces the spice saffron?", a:"Crocus sativus", opts:["Crocus sativus","Curcuma longa","Vanilla planifolia","Piper nigrum"], era:"Any", region:"Middle East" },
+    { q:"Gymnosperms are plants that produce seeds without which structure?", a:"Fruit (enclosed ovary)", opts:["Fruit (enclosed ovary)","Flowers","Pollen","Roots"], era:"Any", region:"Any" },
+    { q:"The pitcher plant is an example of which type of plant?", a:"Carnivorous plant", opts:["Carnivorous plant","Epiphyte","Parasite","Saprophyte"], era:"Any", region:"Asia" },
+    { q:"What is the primary function of a flower's petals?", a:"Attract pollinators", opts:["Attract pollinators","Photosynthesis","Water storage","Protection"], era:"Any", region:"Any" },
+  ],
+
+  geology: [
+    { q:"What are the three main types of rocks?", a:"Igneous, sedimentary, metamorphic", opts:["Igneous, sedimentary, metamorphic","Granite, limestone, marble","Hard, soft, composite","Volcanic, oceanic, continental"], era:"Any", region:"Any" },
+    { q:"What is the Richter scale used to measure?", a:"Earthquake magnitude", opts:["Earthquake magnitude","Volcanic eruption intensity","Tsunami height","Rock hardness"], era:"Any", region:"Any" },
+    { q:"What is the name of the scale used to measure the hardness of minerals?", a:"Mohs scale", opts:["Mohs scale","Richter scale","Mercalli scale","Beaufort scale"], era:"Any", region:"Any" },
+    { q:"The movement of tectonic plates causes which of the following?", a:"All of the above", opts:["All of the above","Earthquakes","Mountain formation","Volcanic activity"], era:"Any", region:"Any" },
+    { q:"What geological era are we currently in?", a:"Cenozoic Era", opts:["Cenozoic Era","Mesozoic Era","Paleozoic Era","Precambrian Era"], era:"Any", region:"Any" },
+    { q:"How old is the Earth, approximately?", a:"4.5 billion years", opts:["4.5 billion years","3.8 billion years","6 billion years","2.5 billion years"], era:"Any", region:"Any" },
+    { q:"What is the name of the process by which one tectonic plate slides under another?", a:"Subduction", opts:["Subduction","Obduction","Rifting","Strike-slip"], era:"Any", region:"Any" },
+    { q:"The Grand Canyon was carved primarily by which river?", a:"Colorado River", opts:["Colorado River","Mississippi River","Rio Grande","Missouri River"], era:"Any", region:"Americas" },
+    { q:"Diamonds are formed under extreme pressure and heat and are composed entirely of which element?", a:"Carbon", opts:["Carbon","Silicon","Nitrogen","Boron"], era:"Any", region:"Any" },
+    { q:"What type of rock is granite?", a:"Igneous", opts:["Igneous","Sedimentary","Metamorphic","Volcanic glass"], era:"Any", region:"Any" },
+    { q:"The Himalayas were formed by the collision of which two tectonic plates?", a:"Indian and Eurasian plates", opts:["Indian and Eurasian plates","African and Arabian plates","Pacific and North American plates","Australian and Pacific plates"], era:"Any", region:"Asia" },
+    { q:"What do we call a rock that has been changed by heat or pressure without melting?", a:"Metamorphic rock", opts:["Metamorphic rock","Igneous rock","Sedimentary rock","Mineral"], era:"Any", region:"Any" },
+    { q:"The Jurassic period lasted approximately from 201 to 145 million years ago and is part of which era?", a:"Mesozoic Era", opts:["Mesozoic Era","Paleozoic Era","Cenozoic Era","Precambrian"], era:"Jurassic / Mesozoic", region:"Any" },
+    { q:"What is the study of earthquakes called?", a:"Seismology", opts:["Seismology","Vulcanology","Petrology","Mineralogy"], era:"Any", region:"Any" },
+    { q:"Iceland sits on which two tectonic plates?", a:"North American and Eurasian plates", opts:["North American and Eurasian plates","African and Eurasian plates","Pacific and North American plates","Arabian and Eurasian plates"], era:"Any", region:"Europe" },
+    { q:"What percentage of the Earth's surface is covered by water?", a:"About 71%", opts:["About 71%","About 50%","About 60%","About 80%"], era:"Any", region:"Any" },
+  ]
+};
+
+// ─── RANGES CONFIG ────────────────────────────────────────────────────────────
+const RANGES = {
+  history: {
+    era: ["Any time period","Ancient","Medieval","Renaissance / Early Modern","Modern (1800s–WWII)","Contemporary (Post-WWII)"],
+    region: ["Any region","Africa","Americas","Asia","Asia-Pacific","Mediterranean / Europe","Middle East"]
+  },
+  science: {
+    era: ["Any period"],
+    region: ["Any branch","Physics","Chemistry","Biology","Astronomy","Earth Science"]
+  },
+  botany: {
+    era: ["Any period","Ancient"],
+    region: ["Any region","Africa","Asia","Middle East","South America"]
+  },
+  geology: {
+    era: ["Any era","Jurassic / Mesozoic"],
+    region: ["Any region","Americas","Asia","Europe"]
+  }
+};
+
+const RANGE2_LABELS = { history:"Region / Culture", science:"Branch", botany:"Region", geology:"Region" };
+const RANGE1_LABELS = { history:"Time Period / Era", science:"Time Period", botany:"Time Period", geology:"Geological Era" };
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let state = { subject:"", era:"", region:"", questions:[], index:0, score:0, answers:[], apiKey:"" };
+
+// ─── SETUP ────────────────────────────────────────────────────────────────────
+function selectSubject(btn) {
+  document.querySelectorAll('.subject-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  state.subject = btn.dataset.subject;
+  populateRanges(state.subject);
+  document.getElementById('range-card').classList.remove('hidden');
+  const startBtn = document.getElementById('start-btn');
+  startBtn.disabled = false;
+  startBtn.textContent = 'Start Quiz →';
+}
+
+function populateRanges(subject) {
+  const r = RANGES[subject];
+  const sel1 = document.getElementById('range1');
+  const sel2 = document.getElementById('range2');
+  sel1.innerHTML = r.era.map(e => `<option value="${e === r.era[0] ? '' : e}">${e}</option>`).join('');
+  sel2.innerHTML = r.region.map(e => `<option value="${e === r.region[0] ? '' : e}">${e}</option>`).join('');
+  document.getElementById('range1-label').textContent = RANGE1_LABELS[subject];
+  document.getElementById('range2-label').textContent = RANGE2_LABELS[subject];
+}
+
+function filterQuestions() {
+  const era = document.getElementById('range1').value;
+  const region = document.getElementById('range2').value;
+  const subject = state.subject;
+  let pool = BANK[subject];
+
+  if (subject === 'history') {
+    if (era) pool = pool.filter(q => q.era === era);
+    if (region) pool = pool.filter(q => q.region === region);
+  } else if (subject === 'science') {
+    if (region) pool = pool.filter(q => q.branch === region);
+  } else {
+    if (era && era !== 'Ancient') pool = pool;
+    if (era === 'Ancient') pool = pool.filter(q => q.era === 'Ancient');
+    if (region) pool = pool.filter(q => q.region === region || q.region === 'Any');
+  }
+
+  if (pool.length < 5) pool = BANK[subject]; // fallback to full bank
+  return shuffle(pool).slice(0, 10).map(q => ({ ...q, opts: shuffle(q.opts) }));
+}
+
+function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+
+// ─── QUIZ ─────────────────────────────────────────────────────────────────────
+async function startQuiz() {
+  state.apiKey = document.getElementById('gemini-key').value.trim();
+  state.era = document.getElementById('range1').value;
+  state.region = document.getElementById('range2').value;
+  state.index = 0; state.score = 0; state.answers = [];
+
+  showScreen('screen-quiz');
+  document.getElementById('q-subject-badge').textContent =
+    state.subject.charAt(0).toUpperCase() + state.subject.slice(1) +
+    (state.era ? ' · ' + state.era : '') +
+    (state.region ? ' · ' + state.region : '');
+
+  if (state.apiKey) {
+    await loadAIQuestions();
+  } else {
+    state.questions = filterQuestions();
+    renderQuestion();
+  }
+}
+
+async function loadAIQuestions() {
+  showLoading(true);
+  const prompt = `Generate exactly 10 multiple-choice quiz questions about ${state.subject}${state.era ? ', specifically the period/era: ' + state.era : ''}${state.region ? ', in the region/context: ' + state.region : ''}. Each question must test genuine knowledge.
+
+Return ONLY valid JSON array with this exact structure:
+[{"q":"Question text?","a":"Correct answer","opts":["Option A","Option B","Option C","Option D"]}]
+The correct answer must be one of the 4 opts. No markdown, no explanation, just the JSON array.`;
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7 } })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const text = data.candidates[0].content.parts[0].text;
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error("No JSON found");
+    const questions = JSON.parse(jsonMatch[0]);
+    state.questions = questions.map(q => ({ ...q, opts: shuffle(q.opts) }));
+  } catch(e) {
+    console.warn('AI failed, using static bank:', e);
+    state.questions = filterQuestions();
+  }
+  showLoading(false);
+  renderQuestion();
+}
+
+function showLoading(on) {
+  document.getElementById('loading-spinner').classList.toggle('hidden', !on);
+  document.getElementById('quiz-content').classList.toggle('hidden', on);
+}
+
+function renderQuestion() {
+  const q = state.questions[state.index];
+  const total = state.questions.length;
+  document.getElementById('q-label').textContent = `Question ${state.index + 1} of ${total}`;
+  document.getElementById('progress-fill').style.width = `${((state.index + 1) / total) * 100}%`;
+  document.getElementById('question-text').textContent = q.q;
+  document.getElementById('feedback').className = 'feedback hidden';
+  document.getElementById('next-wrap').classList.add('hidden');
+
+  const opts = document.getElementById('options');
+  opts.innerHTML = '';
+  q.opts.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.textContent = opt;
+    btn.onclick = () => checkAnswer(opt, q.a);
+    opts.appendChild(btn);
+  });
+}
+
+function checkAnswer(chosen, correct) {
+  document.querySelectorAll('.option-btn').forEach(b => {
+    b.disabled = true;
+    if (b.textContent === correct) b.classList.add('correct');
+    else if (b.textContent === chosen && chosen !== correct) b.classList.add('wrong');
+  });
+  const fb = document.getElementById('feedback');
+  const isCorrect = chosen === correct;
+  if (isCorrect) { state.score++; fb.textContent = '✓ Correct!'; fb.className = 'feedback correct'; }
+  else { fb.textContent = `✗ The correct answer is: ${correct}`; fb.className = 'feedback wrong'; }
+  state.answers.push({ q: state.questions[state.index].q, chosen, correct, ok: isCorrect });
+  document.getElementById('next-wrap').classList.remove('hidden');
+}
+
+function nextQuestion() {
+  state.index++;
+  if (state.index >= state.questions.length) showResults();
+  else renderQuestion();
+}
+
+// ─── RESULTS ──────────────────────────────────────────────────────────────────
+function showResults() {
+  showScreen('screen-results');
+  const total = state.questions.length;
+  const pct = Math.round((state.score / total) * 100);
+  const circle = document.getElementById('score-circle-wrap');
+  circle.innerHTML = `<div class="score-circle" style="--pct:${pct}"><div class="score-text"><div class="num">${state.score}/${total}</div><div class="denom">${pct}%</div></div></div>`;
+
+  const labels = [[90,'🏆 Outstanding!','You really know your stuff.'],[70,'🎉 Great job!','Solid knowledge — keep it up.'],[50,'📚 Good effort!','A bit more study will sharpen things.'],[0,'🌱 Keep learning!','Every expert started somewhere.']];
+  const [, label, sub] = labels.find(([min]) => pct >= min);
+  document.getElementById('result-label').textContent = label;
+  document.getElementById('result-sub').textContent = sub;
+
+  const list = document.getElementById('review-list');
+  list.innerHTML = state.answers.map(a => `
+    <li class="review-item ${a.ok ? 'correct' : 'wrong'}">
+      <div class="review-q">${a.ok ? '✓' : '✗'} ${a.q}</div>
+      ${a.ok ? '' : `<div class="review-a"><span class="yours">Your answer: ${a.chosen}</span> · <span class="correct-ans">Correct: ${a.correct}</span></div>`}
+    </li>`).join('');
+}
+
+function copyShareText() {
+  const subject = state.subject.charAt(0).toUpperCase() + state.subject.slice(1);
+  const total = state.questions.length;
+  const pct = Math.round((state.score / total) * 100);
+  const range = [state.era, state.region].filter(Boolean).join(' · ');
+  const text = `🧠 KnowIt Quiz Result\nSubject: ${subject}${range ? ' (' + range + ')' : ''}\nScore: ${state.score}/${total} (${pct}%)\n\nCan you beat me? 🏆`;
+  const el = document.querySelector('.share-box');
+
+  const finish = () => {
+    el.textContent = '✓ Copied to clipboard!';
+    setTimeout(() => el.textContent = '📋 Copy shareable result', 2000);
+  };
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(finish).catch(() => fallbackCopy(text, finish));
+  } else {
+    fallbackCopy(text, finish);
+  }
+}
+
+function fallbackCopy(text, callback) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try { document.execCommand('copy'); callback(); }
+  catch(e) { alert('Copy failed — please copy manually:\n\n' + text); }
+  document.body.removeChild(ta);
+}
+
+function retryQuiz() { state.index = 0; state.score = 0; state.answers = []; showScreen('screen-quiz'); renderQuestion(); }
+function newQuiz() { showScreen('screen-setup'); }
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+</script>
+</body>
+</html>
